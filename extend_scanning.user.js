@@ -1,0 +1,249 @@
+// ==UserScript==
+// @name         Everynoise Enhancement Script
+// @namespace    http://tampermonkey.net/
+// @version      0.4.6
+// @description  A script to slightly enhance everynoise's user experience
+// @author       NeroYuki
+// @match        https://everynoise.com/*
+// @icon         https://www.google.com/s2/favicons?sz=64&domain=https://everynoise.com/
+// @license      MIT
+// @downloadURL https://update.greasyfork.org/scripts/481088/Everynoise%20Enhancement%20Script.user.js
+// @updateURL https://update.greasyfork.org/scripts/481088/Everynoise%20Enhancement%20Script.meta.js
+// ==/UserScript==
+
+/**
+function highlight(which) {
+    if (gdivs.length == 0) {
+        gdivs = document.getElementsByClassName('genre');
+    }
+    for (i=0; i<gdivs.length; i++) {
+        thisdiv = gdivs[i];
+        thistext = thisdiv.firstChild.textContent;
+        if (thisdiv.className.indexOf('scanme') > -1) {
+            basename = 'genre scanme';
+        } else {
+            basename = 'genre';
+        }
+        if (which.length > 0 && which.trim() == thistext.trim().replace('"', '')) {
+            thisdiv.className = basename + ' current';
+            if(typeof thisdiv.scrollIntoViewIfNeeded == 'function') {
+                thisdiv.scrollIntoViewIfNeeded();
+            } else {
+                thisdiv.scrollIntoView({behavior: "smooth", block: "center", inline: "center"});
+            }
+        } else {
+            thisdiv.className = basename;
+        }
+    }
+}
+**/
+
+(function() {
+    'use strict';
+
+    // Your code here...
+    var head = document.getElementsByTagName('head')[0];
+    var thisScript = document.scripts[0]
+    var cloneScript= document.createElement('script');
+    if (thisScript) {
+        cloneScript.textContent = thisScript.textContent.replace(/scandur \= 6000/g, 'scandur = 29000');
+        cloneScript.textContent = cloneScript.textContent.replace('function playx(key, genre, me) {', 'async function playx(key, genre, me) {');
+        cloneScript.textContent = cloneScript.textContent.replace('highlight(genre);', 'highlight(genre, sample_title);');
+        cloneScript.textContent = cloneScript.textContent.replace('function highlight(which)', 'function highlight(which, sample_title = "")');
+        cloneScript.textContent = cloneScript.textContent.replace('me.setAttribute(\'played\', clicknumber++);', '');
+        cloneScript.textContent = cloneScript.textContent.replace('async function playx(key, genre, me) {', 'async function playx(key, genre, me, loop = false) {');
+        cloneScript.textContent = cloneScript.textContent.replace('if (nowplaying == genre) {', 'if (nowplaying == genre && !loop) {');
+        cloneScript.textContent = cloneScript.textContent.replace('window.clearTimeout(nowpending);', 'if (!loop) { window.clearTimeout(nowpending); }');
+        cloneScript.textContent = cloneScript.textContent.replace('picked.onclick();', 'if (!isLooping) { window.clearTimeout(nowpending); picked.onclick(); } else { window.clearTimeout(nowpending); }');
+        cloneScript.textContent = cloneScript.textContent.replace('thisdiv.scrollIntoViewIfNeeded(false);', 'thisdiv.scrollIntoViewIfNeeded(true);');
+        var cloneScriptLines = cloneScript.textContent.split('\n');
+        var dataInsertLine = 0
+        cloneScriptLines.splice(dataInsertLine, 0, `
+var genreData = [];
+fetch('https://raw.githubusercontent.com/NeroYuki/everynoise_enhancement_script/master/spotify_genres.json')
+    .then(async (response) => {
+        genreData = await response.json();
+        
+        // iterate genreData, if item have is_append, attempt to add it to html 
+        const appendGenres = genreData.filter(val => val.is_append);
+        for (const genre of appendGenres) {
+            // select div class canvas and append the genre follow this template
+            // <div id=item8 preview_url="https://p.scdn.co/mp3-preview/3c1278cf0eb6aba0f72552a3aa469dfed37d8e75" class="genre scanme" scan=true style="color: #c18f02; top: 3064px; left: 1170px; font-size: 130%" role=button tabindex=0 onKeyDown="kb(event);" onclick="playx(&quot;0AAl3LtvIhEilWXZmYHeh5&quot;, &quot;reggaeton&quot;, this);" title="e.g. Zion &quot;More&quot;">reggaeton<a class=navlink href="engenremap-reggaeton.html" role=button tabindex=0 onKeyDown="kb(event);" onclick="event.stopPropagation();" >&raquo;</a> </div>
+            const canvas = document.querySelector('.canvas');
+            const genreDiv = document.createElement('div');
+            genreDiv.className = 'genre scanme';
+            genreDiv.setAttribute('scan', true);
+            // color is array of hsv, use css hsl to set color
+            genreDiv.style.color = \`hsl(\${genre.color[0]}, \${genre.color[1] * 100}%, \${genre.color[2] * 100}%)\`;
+            // top should use the organic_index * canvas height
+            genreDiv.style.top = \`\${genre.organic_index * canvas.clientHeight}px\`;
+            // left should use the atmospheric_index * canvas width
+            genreDiv.style.left = \`\${genre.atmospheric_index * canvas.clientWidth}px\`;
+            // font-size should use popularity level
+            genreDiv.style.fontSize = \`100%\`;
+            genreDiv.setAttribute('role', 'button');
+            genreDiv.setAttribute('tabindex', 0);
+            genreDiv.setAttribute('onKeyDown', 'kb(event);');
+            //let spotify_playlist_id = genre.spotify_playlist.replace('https://embed.spotify.com/?uri=spotify:playlist:', '');
+            genreDiv.setAttribute('onclick', \`playx("\${genre.track_id}", "\${genre.genre}", this);\`);
+            genreDiv.setAttribute('title', \`e.g. \${genre.sample_song}\`);
+            genreDiv.textContent = genre.genre;
+            canvas.appendChild(genreDiv);
+        }
+    });
+
+var isLooping = false;
+
+const dbName = "everynoise_ext";
+let db = null;
+
+const request = indexedDB.open(dbName, 3);
+
+request.onerror = (event) => {
+    alert('error, please disable the userscript');
+};
+
+request.onsuccess = (event) => {
+    db = event.target.result;
+
+    db.transaction("genres")
+        .objectStore("genres").get("pop").onsuccess = (event) => {
+            const res = event.target.result
+            if (!res) {
+                console.log('adding data');
+                fetch('https://raw.githubusercontent.com/NeroYuki/everynoise_enhancement_script/master/spotify_genres_artists_map.json')
+                    .then(async (response) => {
+                        console.log('fetched artists genre mapping');
+                        genreArtist = await response.json();
+                        for (const genre of genreArtist) {
+                            db
+                                .transaction("genres", "readwrite")
+                                .objectStore("genres")
+                                .add(genre);
+                        }
+                    });
+            }
+        }
+};
+
+request.onupgradeneeded = (event) => {
+    db = event.target.result;
+
+    const objectStore = db.createObjectStore("genres", { keyPath: "genre" });
+
+    // Use transaction oncomplete to make sure the objectStore creation is
+    // finished before adding data into it.
+    objectStore.transaction.oncomplete = (event) => {
+        console.log('creation done')
+    };
+};
+
+function getData(dataStore, key) {
+    return new Promise((resolve, reject) => {
+        const dataFetch = db.transaction(dataStore)
+            .objectStore(dataStore).get(key);
+        dataFetch.onsuccess = (event) => {
+            const res = event.target.result
+            resolve(res);
+        }
+        dataFetch.onerror = (event) => {
+            reject(event);
+        }
+
+    })
+}
+        `);
+        var insertLoopLine = cloneScriptLines.findIndex(val => val.includes('var spotifyplayer = document.getElementById(\'spotifyplayer\');')) + 1;
+        cloneScriptLines.splice(insertLoopLine, 0, `
+        console.log(genre, key);
+        spotifyplayer.onended = () => {
+            console.log('ended')
+            playx(key, genre, me, true);
+        };
+        `);
+        var insertSelectionLine = cloneScriptLines.findIndex(val => val.includes('previewurl = me.getAttribute(\'preview_url\')')) + 1;
+        cloneScriptLines.splice(insertSelectionLine, 0, `
+        let sample_title = me.getAttribute('title').replace('e.g. ', '');
+        const res = await getData('genres', genre)
+        var selectionIndex = res?.artists ? Math.floor(Math.random() * res.artists.length + 1) : 0;
+        if (selectionIndex > 1) {
+            previewurl = res.artists[selectionIndex - 1].preview_url;
+            sample_title = res.artists[selectionIndex - 1].sample_song;
+        }
+        `);
+
+        var insertStartResetStateLine = cloneScriptLines.findIndex(val => val.includes('if (state == \'stop\') {')) - 1;
+        cloneScriptLines.splice(insertStartResetStateLine, 0, `
+        if (state == 'start') {
+            isLooping = false;
+        }
+        `);
+
+        var insertLine = cloneScriptLines.findIndex(val => val.includes('thisdiv.scrollIntoView({behavior: "smooth", block: "center", inline: "center"});')) + 2;
+        cloneScriptLines.splice(insertLine, 0, `
+            var label = document.getElementById('genre_label');
+            if (!label) {
+                label = document.createElement('div');
+                document.body.appendChild(label);
+            }
+            var title_label = document.getElementById('title_label');
+            if (!title_label) {
+                title_label = document.createElement('div');
+                document.body.appendChild(title_label);
+            }
+            var loop_label = document.getElementById('loop_label');
+            if (!loop_label) {
+                loop_label = document.createElement('div');
+                document.body.appendChild(loop_label);
+            }
+            let genreInfo = genreData.find(val => val.genre === which.trim())
+            label.id = 'genre_label';
+            title_label.id = 'title_label';
+            loop_label.id = 'loop_label';
+            label.style.position = title_label.style.position = loop_label.style.position = 'absolute';
+            label.style.color = title_label.style.color = loop_label.style.color = 'black';
+            label.style.backgroundColor = title_label.style.backgroundColor = 'white';
+            loop_label.style.backgroundColor = isLooping ? 'green' : 'white';
+            label.style.padding = title_label.style.padding = loop_label.style.padding = '5px';
+            label.style.display = title_label.style.display = loop_label.style.display = 'none';
+            label.textContent = genreInfo ? genreInfo.desc : "No description";
+            title_label.textContent = '▶  ' + (sample_title ? sample_title : "Unknown title");
+            loop_label.textContent = '↻'
+            // set the label position to be above the highlighted div
+            var rect = thisdiv.getBoundingClientRect();
+
+            label.style.left = Math.max(10, (parseInt(thisdiv.style.left) - 100)) + 'px';
+            label.style.width = '300px'
+            label.style.top = (parseInt(thisdiv.style.top) + 136) + 'px';
+            label.style.border = 'solid 1px black';
+            // show the label
+            label.style.display = 'block';
+
+            title_label.style.left = Math.max(10, (parseInt(thisdiv.style.left) - 100)) + 'px';
+            title_label.style.top = (parseInt(thisdiv.style.top) + 76) + 'px';
+            title_label.style.border = 'solid 1px black';
+            // show the label
+            title_label.style.display = sample_title ? 'block' : 'none';
+
+            loop_label.style.left = Math.max(10, (parseInt(thisdiv.style.left) - 124)) + 'px';
+            loop_label.style.top = (parseInt(thisdiv.style.top) + 76) + 'px';
+            loop_label.style.border = 'solid 1px black';
+            // show the label
+            loop_label.style.display = 'block';
+
+            loop_label.onclick = () => {
+                isLooping = !isLooping;
+                loop_label.style.backgroundColor = isLooping ? 'green' : 'white';
+            }
+
+            if(typeof label.scrollIntoViewIfNeeded == 'function') {
+                label.scrollIntoViewIfNeeded();
+            }
+        `);
+        cloneScript.textContent = cloneScriptLines.join('\n');
+        head.appendChild(cloneScript);
+        thisScript.remove();
+    }
+})();
+
+
