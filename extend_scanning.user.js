@@ -64,20 +64,52 @@ fetch('https://raw.githubusercontent.com/NeroYuki/everynoise_enhancement_script/
     .then(async (response) => {
         genreData = await response.json();
         
+        // if current path starts with engenremap, dont append genres
+        if (window.location.pathname.startsWith('/engenremap')) {
+            return;
+        }
         // iterate genreData, if item have is_append, attempt to add it to html 
-        const appendGenres = genreData.filter(val => val.is_append);
+        const appendGenres = genreData.filter(val => val.is_append).sort((a, b) => b.organic_index - a.organic_index);
+        let id = 20000;
+
+        // get the position of all genre divs 
+        const elements = document.getElementsByClassName('genre');
+
+        const positions = [];
+
+        for (let i = 0; i < elements.length; i++) {
+            const element = elements[i];
+            const rect = element.getBoundingClientRect();
+            const position = {
+                top: parseInt(element.style.top.replace('px', '')),
+                left: parseInt(element.style.left.replace('px', '')),
+                width: rect.width,
+                height: rect.height,
+                id: element.id
+            };
+            positions.push(position);
+        }
+
+        // sort the positions by top ascending
+        positions.sort((a, b) => a.top - b.top);
+
+        console.log(positions);
+
         for (const genre of appendGenres) {
             // select div class canvas and append the genre follow this template
             // <div id=item8 preview_url="https://p.scdn.co/mp3-preview/3c1278cf0eb6aba0f72552a3aa469dfed37d8e75" class="genre scanme" scan=true style="color: #c18f02; top: 3064px; left: 1170px; font-size: 130%" role=button tabindex=0 onKeyDown="kb(event);" onclick="playx(&quot;0AAl3LtvIhEilWXZmYHeh5&quot;, &quot;reggaeton&quot;, this);" title="e.g. Zion &quot;More&quot;">reggaeton<a class=navlink href="engenremap-reggaeton.html" role=button tabindex=0 onKeyDown="kb(event);" onclick="event.stopPropagation();" >&raquo;</a> </div>
             const canvas = document.querySelector('.canvas');
             const genreDiv = document.createElement('div');
             genreDiv.className = 'genre scanme';
+            genreDiv.id = "item" + id++;
             genreDiv.setAttribute('scan', true);
             // color is array of hsv, use css hsl to set color
             genreDiv.style.color = \`hsl(\${genre.color[0]}, \${genre.color[1] * 100}%, \${genre.color[2] * 100}%)\`;
-            // top should use the organic_index * canvas height
+            // top should use the organic_index * canvas height, must not overlap with other elements
+            const initialTop = genre.organic_index * canvas.clientHeight;
             genreDiv.style.top = \`\${genre.organic_index * canvas.clientHeight}px\`;
             // left should use the atmospheric_index * canvas width
+            const initialLeft = genre.atmospheric_index * canvas.clientWidth;
             genreDiv.style.left = \`\${genre.atmospheric_index * canvas.clientWidth}px\`;
             // font-size should use popularity level
             genreDiv.style.fontSize = \`100%\`;
@@ -89,7 +121,59 @@ fetch('https://raw.githubusercontent.com/NeroYuki/everynoise_enhancement_script/
             genreDiv.setAttribute('title', \`e.g. \${genre.sample_song}\`);
             genreDiv.textContent = genre.genre;
             canvas.appendChild(genreDiv);
+
+            // iterate from the the element with the same top position and check if it overlaps
+            const rect = genreDiv.getBoundingClientRect();
+            let overlapCheckStartIndex = positions.findIndex(val => val.top + rect.height >= initialTop);
+            // start checking from overlapCheckStartIndex, if any of it overlaps with the current element
+            if (overlapCheckStartIndex !== -1) {
+                let overlap = false;
+                let adjustment_y = 0;
+                for (let i = overlapCheckStartIndex; i < positions.length; i++) {
+                    const position = positions[i];
+                    if ((position.top + position.height >= initialTop && position.top <= initialTop + rect.height) && (position.left + position.width >= initialLeft && position.left <= initialLeft + rect.width)) {
+                        overlap = true;
+                        adjustment_y = Math.max(adjustment_y, rect.height - (position.top - initialTop));
+                        //console.log('overlap found, adjustment:', adjustment_y);
+                    }
+                    if (overlap) {
+                        // shift every element below the current element by the adjustment_y
+                        position.top += adjustment_y;
+                    }
+                    // in case position.top > top + 20, it is guaranteed that the rest of the elements will not overlap, break the loop
+                    else if (position.top > initialTop + rect.height) {
+                        break;
+                    }
+                }
+            }
+
+            // add the new element itself to the positions array
+            positions.push({
+                top: initialTop,
+                left: initialLeft,
+                width: rect.width,
+                height: rect.height,
+                id: genreDiv.id
+            });
+
+            // sort the positions array again
+            positions.sort((a, b) => a.top - b.top);
         }
+
+        console.log(positions);
+
+        // re-position the elements with the positions array
+        for (let i = 0; i < positions.length; i++) {
+            const position = positions[i];
+            const element = document.getElementById(position.id);
+            element.style.top = position.top + 'px';
+        }
+
+        // adjust canvas size to fit all elements
+        const lastPosition = positions[positions.length - 1];
+        const canvasDiv = document.querySelector('.canvas');
+
+        canvasDiv.style.height = lastPosition.top + lastPosition.height + 'px';
     });
 
 var isLooping = false;
