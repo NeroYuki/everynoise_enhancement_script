@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Everynoise Enhancement Script
 // @namespace    http://tampermonkey.net/
-// @version      0.4.8
+// @version      0.4.9
 // @description  A script to slightly enhance everynoise's user experience
 // @author       NeroYuki
 // @match        https://everynoise.com/*
@@ -53,7 +53,7 @@ function highlight(which) {
         cloneScript.textContent = cloneScript.textContent.replace('function highlight(which)', 'function highlight(which, sample_title = "")');
         cloneScript.textContent = cloneScript.textContent.replace('me.setAttribute(\'played\', clicknumber++);', '');
         cloneScript.textContent = cloneScript.textContent.replace('async function playx(key, genre, me) {', 'async function playx(key, genre, me, loop = false) {');
-        cloneScript.textContent = cloneScript.textContent.replace('function scan(e, state) {' , 'function scan(e, state, scan_duration = 29000) {');
+        cloneScript.textContent = cloneScript.textContent.replace('function scan(e, state) {' , 'function scan(e, state, scan_duration = 29000) { if (!scan_duration || scan_duration < 0) {scan_duration = 29000}');
         cloneScript.textContent = cloneScript.textContent.replace('scan("continue")', 'scan("continue", document.getElementById("scan_length").value * 1000)');
         cloneScript.textContent = cloneScript.textContent.replace('scan("stop")', 'scan("stop", document.getElementById("scan_length").value * 1000)');
         cloneScript.textContent = cloneScript.textContent.replace('scandur = 6000', 'scandur = scan_duration');
