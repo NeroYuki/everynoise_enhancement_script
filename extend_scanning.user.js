@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         Everynoise Enhancement Script
 // @namespace    http://tampermonkey.net/
-// @version      0.4.7
+// @version      0.4.8
 // @description  A script to slightly enhance everynoise's user experience
 // @author       NeroYuki
 // @match        https://everynoise.com/*
@@ -217,6 +217,10 @@ request.onsuccess = (event) => {
 
 request.onupgradeneeded = (event) => {
     db = event.target.result;
+    // delete the existing object store
+    if (db.objectStoreNames.contains("genres")) {
+        db.deleteObjectStore("genres");
+    }
 
     const objectStore = db.createObjectStore("genres", { keyPath: "genre" });
 
