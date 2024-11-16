@@ -1,83 +1,18 @@
-// ==UserScript==
-// @name         Everynoise Enhancement Script
-// @namespace    http://tampermonkey.net/
-// @version      0.4.7
-// @description  A script to slightly enhance everynoise's user experience
-// @author       NeroYuki
-// @match        https://everynoise.com/*
-// @icon         https://www.google.com/s2/favicons?sz=64&domain=https://everynoise.com/
-// @license      MIT
-// @downloadURL https://update.greasyfork.org/scripts/481088/Everynoise%20Enhancement%20Script.user.js
-// @updateURL https://update.greasyfork.org/scripts/481088/Everynoise%20Enhancement%20Script.meta.js
-// ==/UserScript==
 
-/**
-function highlight(which) {
-    if (gdivs.length == 0) {
-        gdivs = document.getElementsByClassName('genre');
-    }
-    for (i=0; i<gdivs.length; i++) {
-        thisdiv = gdivs[i];
-        thistext = thisdiv.firstChild.textContent;
-        if (thisdiv.className.indexOf('scanme') > -1) {
-            basename = 'genre scanme';
-        } else {
-            basename = 'genre';
-        }
-        if (which.length > 0 && which.trim() == thistext.trim().replace('"', '')) {
-            thisdiv.className = basename + ' current';
-            if(typeof thisdiv.scrollIntoViewIfNeeded == 'function') {
-                thisdiv.scrollIntoViewIfNeeded();
-            } else {
-                thisdiv.scrollIntoView({behavior: "smooth", block: "center", inline: "center"});
-            }
-        } else {
-            thisdiv.className = basename;
-        }
-    }
-}
-**/
-
-(function() {
-    'use strict';
-
-    // Your code here...
-    var head = document.getElementsByTagName('head')[0];
-    var thisScript = document.scripts[0]
-    var cloneScript= document.createElement('script');
-    if (thisScript) {
-        // remove var scandur = 6000
-        cloneScript.textContent = thisScript.textContent.replace('var scandur = 6000;', '');
-        cloneScript.textContent = cloneScript.textContent.replace('function playx(key, genre, me) {', 'async function playx(key, genre, me) {');
-        cloneScript.textContent = cloneScript.textContent.replace('highlight(genre);', 'highlight(genre, sample_title);');
-        cloneScript.textContent = cloneScript.textContent.replace('function highlight(which)', 'function highlight(which, sample_title = "")');
-        cloneScript.textContent = cloneScript.textContent.replace('me.setAttribute(\'played\', clicknumber++);', '');
-        cloneScript.textContent = cloneScript.textContent.replace('async function playx(key, genre, me) {', 'async function playx(key, genre, me, loop = false) {');
-        cloneScript.textContent = cloneScript.textContent.replace('function scan(e, state) {' , 'function scan(e, state, scan_duration = 29000) {');
-        cloneScript.textContent = cloneScript.textContent.replace('scan("continue")', 'scan("continue", document.getElementById("scan_length").value * 1000)');
-        cloneScript.textContent = cloneScript.textContent.replace('scan("stop")', 'scan("stop", document.getElementById("scan_length").value * 1000)');
-        cloneScript.textContent = cloneScript.textContent.replace('scandur = 6000', 'scandur = scan_duration');
-        cloneScript.textContent = cloneScript.textContent.replace('if (nowplaying == genre) {', 'if (nowplaying == genre && !loop) {');
-        cloneScript.textContent = cloneScript.textContent.replace('window.clearTimeout(nowpending);', 'if (!loop) { window.clearTimeout(nowpending); }');
-        cloneScript.textContent = cloneScript.textContent.replace('picked.onclick();', 'if (!isLooping) { window.clearTimeout(nowpending); picked.onclick(); } else { window.clearTimeout(nowpending); }');
-        cloneScript.textContent = cloneScript.textContent.replace('thisdiv.scrollIntoViewIfNeeded(false);', 'thisdiv.scrollIntoViewIfNeeded(true);');
-        var cloneScriptLines = cloneScript.textContent.split('\n');
-        var dataInsertLine = 0
-        cloneScriptLines.splice(dataInsertLine, 0, `
 var genreData = [];
 fetch('https://raw.githubusercontent.com/NeroYuki/everynoise_enhancement_script/master/spotify_genres.json')
     .then(async (response) => {
         genreData = await response.json();
-        
+
         // if current path starts with engenremap, dont append genres
         if (window.location.pathname.startsWith('/engenremap')) {
             return;
         }
-        // iterate genreData, if item have is_append, attempt to add it to html 
+        // iterate genreData, if item have is_append, attempt to add it to html
         const appendGenres = genreData.filter(val => val.is_append).sort((a, b) => b.organic_index - a.organic_index);
         let id = 20000;
 
-        // get the position of all genre divs 
+        // get the position of all genre divs
         const elements = document.getElementsByClassName('genre');
 
         const positions = [];
@@ -109,33 +44,41 @@ fetch('https://raw.githubusercontent.com/NeroYuki/everynoise_enhancement_script/
             genreDiv.id = "item" + id++;
             genreDiv.setAttribute('scan', true);
             // color is array of hsv, use css hsl to set color
-            genreDiv.style.color = \`hsl(\${genre.color[0]}, \${genre.color[1] * 100}%, \${genre.color[2] * 100}%)\`;
+            genreDiv.style.color = `hsl(${genre.color[0]}, ${genre.color[1] * 100}%, ${genre.color[2] * 100}%)`;
             // top should use the organic_index * canvas height, must not overlap with other elements
             const initialTop = genre.organic_index * canvas.clientHeight;
-            genreDiv.style.top = \`\${genre.organic_index * canvas.clientHeight}px\`;
+            genreDiv.style.top = `${genre.organic_index * canvas.clientHeight}px`;
             // left should use the atmospheric_index * canvas width
             const initialLeft = genre.atmospheric_index * canvas.clientWidth;
-            genreDiv.style.left = \`\${genre.atmospheric_index * canvas.clientWidth}px\`;
+            genreDiv.style.left = `${genre.atmospheric_index * canvas.clientWidth}px`;
             // font-size should use popularity level
-            genreDiv.style.fontSize = \`100%\`;
+            genreDiv.style.fontSize = `100%`;
             genreDiv.setAttribute('role', 'button');
             genreDiv.setAttribute('tabindex', 0);
             genreDiv.setAttribute('onKeyDown', 'kb(event);');
             //let spotify_playlist_id = genre.spotify_playlist.replace('https://embed.spotify.com/?uri=spotify:playlist:', '');
-            genreDiv.setAttribute('onclick', \`playx("\${genre.track_id}", "\${genre.genre}", this);\`);
-            genreDiv.setAttribute('title', \`e.g. \${genre.sample_song}\`);
+            genreDiv.setAttribute('onclick', `playx("${genre.track_id}", "${genre.genre}", this);`);
+            genreDiv.setAttribute('title', `e.g. ${genre.sample_song}`);
             genreDiv.textContent = genre.genre;
             canvas.appendChild(genreDiv);
+
+            const shouldDebug = genre.genre === 'chinese hyperpop';
 
             // iterate from the the element with the same top position and check if it overlaps
             const rect = genreDiv.getBoundingClientRect();
             let overlapCheckStartIndex = positions.findIndex(val => val.top + rect.height >= initialTop);
+            if (shouldDebug) console.log('overlapCheckStartIndex', overlapCheckStartIndex);
+            if (shouldDebug) console.log('initialTop', initialTop);
+            if (shouldDebug) console.log('initialLeft', initialLeft);
+
             // start checking from overlapCheckStartIndex, if any of it overlaps with the current element
             if (overlapCheckStartIndex !== -1) {
                 let overlap = false;
                 let adjustment_y = 0;
                 for (let i = overlapCheckStartIndex; i < positions.length; i++) {
                     const position = positions[i];
+                    if (shouldDebug) console.log('checking', position);
+                    if (shouldDebug) console.log((position.top + position.height >= initialTop && position.top <= initialTop + rect.height) && (position.left + position.width >= initialLeft && position.left <= initialLeft + rect.width));
                     if ((position.top + position.height >= initialTop && position.top <= initialTop + rect.height) && (position.left + position.width >= initialLeft && position.left <= initialLeft + rect.width)) {
                         overlap = true;
                         adjustment_y = Math.max(adjustment_y, rect.height - (position.top - initialTop));
@@ -241,17 +184,50 @@ function getData(dataStore, key) {
 
     })
 }
-        `);
-        var insertLoopLine = cloneScriptLines.findIndex(val => val.includes('var spotifyplayer = document.getElementById(\'spotifyplayer\');')) + 1;
-        cloneScriptLines.splice(insertLoopLine, 0, `
+        
+
+var nowplaying = '';
+var nowpending = '';
+var gdivs = [];
+var scandivs = [];
+var clicknumber = 1;
+var scandur = 29000;
+
+function redraw() {
+    document.forms[0].submit();
+}
+
+function getpreviewurl(id) {
+    var http_request = new XMLHttpRequest();
+    url = '/spotproxy.cgi?track=' + id;
+    http_request.open("GET", url, false);
+    http_request.send(null);
+    tdata = JSON.parse(http_request.responseText);
+    if ('preview_url' in tdata) {
+        previewurl = tdata['preview_url'];
+        return previewurl;
+    }
+    return null;
+}
+
+async function playx(key, genre, me, loop = false) {
+    if (!loop) { window.clearTimeout(nowpending); }
+    var spotifyplayer = document.getElementById('spotifyplayer');
+
         console.log(genre, key);
         spotifyplayer.onended = () => {
             console.log('ended')
             playx(key, genre, me, true);
         };
-        `);
-        var insertSelectionLine = cloneScriptLines.findIndex(val => val.includes('previewurl = me.getAttribute(\'preview_url\')')) + 1;
-        cloneScriptLines.splice(insertSelectionLine, 0, `
+        
+    if (nowplaying == genre && !loop) {
+        spotifyplayer.pause();
+        highlight('');
+        nowplaying = '';
+        document.getElementById('scan').innerText = 'scan';
+    } else {
+        previewurl = me.getAttribute('preview_url')
+
         let sample_title = me.getAttribute('title').replace('e.g. ', '');
         const res = await getData('genres', genre)
         var selectionIndex = res?.artists ? Math.floor(Math.random() * res.artists.length + 1) : 0;
@@ -259,17 +235,98 @@ function getData(dataStore, key) {
             previewurl = res.artists[selectionIndex - 1].preview_url;
             sample_title = res.artists[selectionIndex - 1].sample_song;
         }
-        `);
-
-        var insertStartResetStateLine = cloneScriptLines.findIndex(val => val.includes('if (state == \'stop\') {')) - 1;
-        cloneScriptLines.splice(insertStartResetStateLine, 0, `
-        if (state == 'start') {
-            isLooping = false;
+        
+        if (!previewurl && key) {
+            previewurl = getpreviewurl(key);
         }
-        `);
+        if (previewurl) {
+            spotifyplayer.src = previewurl;
+            spotifyplayer.play();
+            
+            nowplaying = genre;
+            highlight(genre, sample_title);
+        }
+    }
+}
 
-        var insertLine = cloneScriptLines.findIndex(val => val.includes('thisdiv.scrollIntoView({behavior: "smooth", block: "center", inline: "center"});')) + 2;
-        cloneScriptLines.splice(insertLine, 0, `
+function findPosX(obj)
+{
+    var left = 0;
+    if(obj.offsetParent)
+    {
+        while(1) 
+        {
+          left += obj.offsetLeft;
+          if(!obj.offsetParent)
+            break;
+          obj = obj.offsetParent;
+        }
+    }
+    else if(obj.x)
+    {
+        left += obj.x;
+    }
+    return left;
+}
+
+function findPosY(obj)
+{
+    var top = 0;
+    if(obj.offsetParent)
+    {
+        while(1)
+        {
+          top += obj.offsetTop;
+          if(!obj.offsetParent)
+            break;
+          obj = obj.offsetParent;
+        }
+    }
+    else if(obj.y)
+    {
+        top += obj.y;
+    }
+    return top;
+}
+
+function playhere(me, url) {
+    var rp = document.getElementById('rp');
+    rp.style.display = 'none';
+    rp.firstChild.onload = function() {
+        rp.style.top = findPosY(me) + 20;
+        rleft = findPosX(me);
+        if (rleft + 500 > window.innerWidth) {
+            rleft = window.innerWidth - 500;
+            if (rleft < 0) {
+                rleft = 0;
+            }
+        }
+        rp.style.left = rleft;
+        rp.style.display = 'block';
+    }
+    rp.lastChild.src = url;
+}
+
+function highlight(which, sample_title = "") {
+    if (gdivs.length == 0) {
+        gdivs = document.getElementsByClassName('genre');
+    }
+    for (i=0; i<gdivs.length; i++) {
+        thisdiv = gdivs[i];
+        thistext = thisdiv.firstChild.textContent;
+        if (thisdiv.className.indexOf('scanme') > -1) {
+            basename = 'genre scanme';
+        } else {
+            basename = 'genre';
+        }
+        if (which.length > 0 && which.trim() == thistext.trim().replace('"', '')) {
+            thisdiv.className = basename + ' current';
+            if(typeof thisdiv.scrollIntoViewIfNeeded == 'function') {
+                thisdiv.scrollIntoViewIfNeeded();
+            } else {
+                thisdiv.scrollIntoView({behavior: "smooth", block: "center", inline: "center"});
+            }
+
             var label = document.getElementById('genre_label');
             if (!label) {
                 label = document.createElement('div');
@@ -328,39 +385,68 @@ function getData(dataStore, key) {
             if(typeof label.scrollIntoViewIfNeeded == 'function') {
                 label.scrollIntoViewIfNeeded();
             }
-        `);
-        cloneScript.textContent = cloneScriptLines.join('\n');
-        head.appendChild(cloneScript);
-        thisScript.remove();
+        
+        } else {
+            thisdiv.className = basename;
+        }
+    }
+}
+
+function scan(e, state, scan_duration = 29000) {
+    if (typeof(e) == 'object') {
+        if (e.altKey) {
+            scandur = 20000;
+        } else {
+            scandur = scan_duration;
+        }
     }
 
-    // find element with id "scan" and append a text input next to it
-    var scanElement = document.getElementById('scan');
-    if (scanElement) {
-        var inputElement = document.createElement('input');
-        inputElement.type = 'number';
-        inputElement.id = 'scan_length';
-        inputElement.placeholder = 'scan length';
-        inputElement.style.marginLeft = '10px';
-        inputElement.style.width = '80px';
-        scanElement.parentNode.insertBefore(inputElement, scanElement.nextSibling);
-    }
-    // change scan element's onclick property string to replace scan(event, 'start') and scan(event, 'stop') to scan(event, 'start', <scan_length>) and scan(event, 'stop', <scan_length>)
-    if (scanElement) {
-        scanElement.removeAttribute('onclick');
-
-        // add event listener to scan element
-        // if (this.innerText == 'scan') {scan(event, 'start');this.innerHTML = 'stop';} else {scan(event, 'stop');this.innerHTML = 'scan';}
-        scanElement.addEventListener('click', function() {
-            if (this.innerText == 'scan') {
-                scan(event, 'start', document.getElementById('scan_length').value * 1000);
-                this.innerHTML = 'stop';
-            } else {
-                scan(event, 'stop', document.getElementById('scan_length').value * 1000);
-                this.innerHTML = 'scan';
+        if (state == 'start') {
+            isLooping = false;
+        }
+        
+    var spotifyplayer = document.getElementById('spotifyplayer');
+    if (state == 'stop') {
+        spotifyplayer.pause();        
+        highlight('');
+        window.clearTimeout(nowpending);
+    } else {
+        if (gdivs.length == 0) {
+            gdivs = document.getElementsByClassName('scanme');
+        }
+        scandivs = [];
+        for (i=0; i<gdivs.length; i++) {
+            thisdiv = gdivs[i];
+            if (thisdiv.getAttribute('scan') && !thisdiv.getAttribute('played')) {
+                scandivs.push(thisdiv)
             }
-        });
+        }
+        picked = scandivs[Math.floor(Math.random() * scandivs.length)];
+        if (!isLooping) { window.clearTimeout(nowpending); picked.onclick(); } else { window.clearTimeout(nowpending); }
+        if (scandivs.length > 1) {
+            nowpending = window.setTimeout('scan("continue", scan_duration)', scandur);
+        } else {
+            nowpending = window.setTimeout('scan("stop", scan_duration)', scandur);
+        }
     }
-})();
+}
 
+function togglecontrols() {
+    var spotifyplayer = document.getElementById('spotifyplayer');
+    if (spotifyplayer.style.visibility == 'hidden') {
+        spotifyplayer.style.visibility = 'visible';
+    } else {
+        spotifyplayer.style.visibility = 'hidden';
+    }
+}
 
+function kb(event) {
+    if(event.code === 'Space' || event.code === 'Enter') {
+        event.target.click();
+        event.preventDefault();
+    }
+}
+
+window.addEventListener('scroll', (event) => {
+    document.getElementById('book').style.top = (window.scrollY < 84 ? 84 : (window.scrollY > 164 ? 0 : 164 - window.scrollY));
+})
